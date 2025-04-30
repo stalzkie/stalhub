@@ -1,0 +1,1 @@
+// Stub file for sign_in_with_apple plugin

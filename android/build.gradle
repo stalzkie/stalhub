@@ -1,0 +1,57 @@
+// Top-level build file for Stalhub
+
+buildscript {
+    ext.kotlin_version = '1.9.10'
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.3.1'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath 'com.google.gms:google-services:4.4.0' // ✅ Firebase services
+    }
+}
+
+// ✅ Load flutter SDK
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { stream -> localProperties.load(stream) }
+}
+def flutterRoot = localProperties.getProperty('flutter.sdk')
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    configurations.all {
+        resolutionStrategy {
+            force 'androidx.core:core-ktx:1.13.1'
+            force 'androidx.core:core:1.13.1'
+            force 'androidx.appcompat:appcompat:1.6.1'
+            force 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.2'
+            force 'androidx.work:work-runtime-ktx:2.9.0'
+            force 'androidx.activity:activity-ktx:1.8.2'
+            force 'androidx.fragment:fragment-ktx:1.6.2'
+        }
+    }
+}
+
+rootProject.buildDir = "../build"
+
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+
+    if (project.name == "app") {
+        project.evaluationDependsOn(":app")
+    }
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}

@@ -1,0 +1,2 @@
+C:/Users/VICTUS/stalhub/android/app/.cxx/RelWithDebInfo/30x3a3w6/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/Users/VICTUS/stalhub/android/app/.cxx/RelWithDebInfo/30x3a3w6/armeabi-v7a/CMakeFiles/rebuild_cache.dir

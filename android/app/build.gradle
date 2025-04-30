@@ -1,0 +1,52 @@
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+    id "dev.flutter.flutter-gradle-plugin" // ✅ Required by Flutter 3.19+
+    id "com.onesignal.androidsdk.onesignal-gradle-plugin" version "0.14.0"
+    id "com.google.gms.google-services"
+}
+
+android {
+    namespace = "com.example.stalhub"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "com.example.stalhub"
+        minSdk = 21
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.13.1'
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation "com.onesignal:OneSignal:5.0.4"
+    implementation "androidx.work:work-runtime-ktx:2.9.0"
+
+    constraints {
+        implementation("androidx.appcompat:appcompat:1.6.1")
+        implementation("com.google.android.material:material:1.10.0")
+        implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
+        implementation("androidx.activity:activity-ktx:1.8.2")
+        implementation("androidx.fragment:fragment-ktx:1.6.2")
+    }
+}

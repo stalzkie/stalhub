@@ -1,0 +1,15 @@
+name: sign_in_with_apple_fixed
+description: A fixed version of sign_in_with_apple plugin for Flutter 3.10+ compatibility.
+version: 5.0.0+fixed
+
+environment:
+  sdk: ">=2.18.0 <4.0.0"
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.aboutyou.dart_packages.sign_in_with_apple
+        pluginClass: SignInWithApplePlugin
+      ios:
+        pluginClass: SignInWithApplePlugin

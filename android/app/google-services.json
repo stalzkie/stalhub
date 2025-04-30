@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "496858845050",
+    "project_id": "stalhub",
+    "storage_bucket": "stalhub.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:496858845050:android:b9a0b2109e7897f8e450c3",
+        "android_client_info": {
+          "package_name": "com.example.stalhub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5cnriZvmZDfn3m6FmOvxC7jrXCoJKPF0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
