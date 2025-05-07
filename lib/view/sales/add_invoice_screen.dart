@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:stalhub/view_model/auth/login_view_model.dart';
 import 'package:stalhub/view_model/sales/invoice_view_model.dart';
+import 'package:stalhub/view/widgets/status_indicator.dart';
 import '../../../data/models/invoice_model.dart';
 
 class AddInvoiceScreen extends StatefulWidget {
@@ -16,13 +16,17 @@ class _AddInvoiceScreenState extends State<AddInvoiceScreen> {
   final _formKey = GlobalKey<FormState>();
   final _clientNameController = TextEditingController();
   final _priceController = TextEditingController();
-  final _statusController = TextEditingController();
   final _platformController = TextEditingController();
   final _notesController = TextEditingController();
 
   final DateTime _createdAt = DateTime.now();
   DateTime? _dueDate;
   int? _invoiceId;
+  String _selectedStatus = 'Paid';
+  bool _submitted = false;
+  bool _isLoading = false;
+
+  final List<String> _statusOptions = ['Paid', 'Unpaid', 'Discarded'];
 
   @override
   void initState() {
@@ -31,136 +35,213 @@ class _AddInvoiceScreenState extends State<AddInvoiceScreen> {
   }
 
   Future<void> _fetchNextInvoiceId() async {
-    final vm = context.read<InvoiceViewModel>();  // ✅ Use existing provider
+    final vm = context.read<InvoiceViewModel>();
     await vm.fetchInvoices();
     final invoices = vm.allInvoices;
     setState(() {
-      _invoiceId = invoices.isEmpty ? 1 : invoices.map((t) => t.id).reduce((a, b) => a > b ? a : b) + 1;
+      _invoiceId = invoices.isEmpty
+          ? 1
+          : invoices.map((t) => t.id).reduce((a, b) => a > b ? a : b) + 1;
     });
   }
 
   Future<void> _submitForm() async {
+    setState(() => _submitted = true);
+
+    final isEmptyRequiredField = _clientNameController.text.isEmpty ||
+        _priceController.text.isEmpty ||
+        _platformController.text.isEmpty ||
+        _dueDate == null;
+
+    if (isEmptyRequiredField || _invoiceId == null) {
+      _showErrorDialog("Please fill up all the required information.");
+      return;
+    }
+
+    final parsedPrice = double.tryParse(_priceController.text);
+    if (parsedPrice == null) {
+      _showErrorDialog("Please enter a valid number for Price.");
+      return;
+    }
+
     if (_formKey.currentState?.validate() != true) return;
-    if (_dueDate == null || _invoiceId == null) return;
+
+    setState(() => _isLoading = true);
 
     final invoice = Invoice(
       id: _invoiceId!,
       clientName: _clientNameController.text,
-      price: double.tryParse(_priceController.text) ?? 0,
-      status: _statusController.text,
+      price: parsedPrice,
+      status: _selectedStatus,
       platform: _platformController.text,
       dueDate: _dueDate!,
       notes: _notesController.text,
       createdAt: _createdAt,
     );
-    final loginVM = Provider.of<LoginViewModel>(context, listen: false);
-    final vm = InvoiceViewModel(
-      userId: loginVM.loggedInUser?.id ?? '',
-      playerId: loginVM.loggedInUser?.playerId ?? '',
+
+    final vm = context.read<InvoiceViewModel>();
+    await vm.addInvoice(invoice);
+    await vm.fetchInvoices(); // refresh the list
+
+    if (context.mounted) {
+      Navigator.pop(context, true); // return to invoice list
+    }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Invalid Input"),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text("OK"),
+          ),
+        ],
+      ),
     );
-
-    await vm.addInvoice(invoice);  // ✅ PlayerId injected
-
-    if (context.mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: _invoiceId == null
-          ? const Center(child: CircularProgressIndicator())
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                    child: IntrinsicHeight(
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 40),
-                          Image.asset(
-                            'assets/images/stalwrites-logo.png',
-                            width: 122,
-                            height: 68,
-                          ),
-                          Expanded(
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.fromLTRB(30, 40, 30, 40),
-                              decoration: ShapeDecoration(
-                                color: const Color(0xFFEDEDED),
-                                shape: RoundedRectangleBorder(
-                                  side: BorderSide(width: 2, color: Colors.black.withAlpha(128)),
-                                  borderRadius: const BorderRadius.only(
-                                    topLeft: Radius.circular(50),
-                                    topRight: Radius.circular(50),
-                                  ),
-                                ),
-                              ),
-                              child: Form(
-                                key: _formKey,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    _labelText("Invoice ID: $_invoiceId", bold: true),
-                                    const SizedBox(height: 8),
-                                    _textInput("Client Name", controller: _clientNameController),
-                                    _textInput("Price", controller: _priceController, keyboard: TextInputType.number),
-                                    _textInput("Status", controller: _statusController),
-                                    _textInput("Platform", controller: _platformController),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        Expanded(child: _labelText(DateFormat.yMMMd().format(_createdAt))),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              side: BorderSide(width: 2, color: Colors.black.withAlpha(128)),
-                                              backgroundColor: Colors.white,
-                                              foregroundColor: Colors.black,
-                                            ),
-                                            onPressed: () async {
-                                              final picked = await showDatePicker(
-                                                context: context,
-                                                initialDate: DateTime.now(),
-                                                firstDate: DateTime(2020),
-                                                lastDate: DateTime(2100),
-                                              );
-                                              if (picked != null) {
-                                                setState(() => _dueDate = picked);
-                                              }
-                                            },
-                                            child: Text(_dueDate == null ? "Select Due" : DateFormat.yMMMd().format(_dueDate!)),
-                                          ),
-                                        )
-                                      ],
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _textInput("Notes (optional)", controller: _notesController, maxLines: 3),
-                                    const SizedBox(height: 20),
-                                    _button("Add Invoice", const Color.fromARGB(255, 26, 26, 26), _submitForm),
-                                    const SizedBox(height: 10),
-                                    _button("Go Back", Colors.white, () => Navigator.pop(context), isOutline: true),
-                                  ],
-                                ),
+      backgroundColor: const Color(0xFFF9F9F9),
+      body: Stack(
+        children: [
+          _invoiceId == null
+              ? const Center(child: CircularProgressIndicator())
+              : SafeArea(
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () => Navigator.pop(context),
+                              child: Image.asset(
+                                'assets/images/back-button-icon.png',
+                                width: 32,
+                                height: 32,
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
+                          child: Form(
+                            key: _formKey,
+                            autovalidateMode: _submitted
+                                ? AutovalidateMode.always
+                                : AutovalidateMode.disabled,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _label("Invoice ID: $_invoiceId", 20, FontWeight.w600),
+                                _input("Client Name", _clientNameController),
+                                _input("Price", _priceController, keyboard: TextInputType.number),
+                                _dropdownStatusField(),
+                                _input("Platform", _platformController),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _label("Created: ${DateFormat.yMMMd().format(_createdAt)}", 14, FontWeight.w500),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.white,
+                                          foregroundColor: Colors.black,
+                                          side: BorderSide(
+                                            color: (_dueDate == null && _submitted)
+                                                ? Colors.red
+                                                : Colors.black.withAlpha(128),
+                                            width: 2,
+                                          ),
+                                        ),
+                                        onPressed: () async {
+                                          final picked = await showDatePicker(
+                                            context: context,
+                                            initialDate: DateTime.now(),
+                                            firstDate: DateTime(2020),
+                                            lastDate: DateTime(2100),
+                                          );
+                                          if (picked != null) {
+                                            setState(() => _dueDate = picked);
+                                          }
+                                        },
+                                        child: Text(
+                                          _dueDate == null
+                                              ? "Select Due Date"
+                                              : DateFormat.yMMMd().format(_dueDate!),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                _input("Notes (optional)", _notesController, maxLines: 3),
+                                const SizedBox(height: 80),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              },
+                ),
+          if (_isLoading)
+            Container(
+              color: Colors.white.withOpacity(0.8),
+              child: const Center(
+                child: SizedBox(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFFFF7240), // Match your brand color
+                    strokeWidth: 6,// Thicker ring
+                  ),
+                ),
+              ),
             ),
+        ],
+      ),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(25, 0, 25, 25),
+        child: GestureDetector(
+          onTap: _submitForm,
+          child: Container(
+            height: 48,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF7240),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.black.withAlpha(204), width: 2),
+            ),
+            child: const Text(
+              'Add Invoice',
+              style: TextStyle(
+                fontSize: 18,
+                fontFamily: 'Figtree',
+                fontWeight: FontWeight.w500,
+                color: Colors.black,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _textInput(String hint, {TextEditingController? controller, int maxLines = 1, TextInputType? keyboard}) {
+  Widget _input(String hint, TextEditingController controller,
+      {int maxLines = 1, TextInputType? keyboard}) {
+    final isOptional = hint.toLowerCase().contains("optional");
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: TextFormField(
         controller: controller,
         maxLines: maxLines,
@@ -169,52 +250,83 @@ class _AddInvoiceScreenState extends State<AddInvoiceScreen> {
           hintText: hint,
           filled: true,
           fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(color: Colors.black.withAlpha(100)),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: (_submitted && !isOptional && controller.text.isEmpty)
+                ? const BorderSide(color: Colors.red)
+                : BorderSide.none,
           ),
         ),
         validator: (value) {
-          if (hint.contains("optional")) return null;
+          if (isOptional) return null;
           return (value == null || value.isEmpty) ? "Required" : null;
         },
       ),
     );
   }
 
-  Widget _labelText(String text, {bool bold = false}) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: bold ? 20 : 14,
-        fontWeight: bold ? FontWeight.bold : FontWeight.w400,
-        fontFamily: 'Figtree',
+  Widget _dropdownStatusField() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Status',
+              style: TextStyle(
+                fontSize: 14,
+                fontFamily: 'Figtree',
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedStatus,
+                dropdownColor: Colors.white,
+                borderRadius: BorderRadius.circular(15),
+                elevation: 6,
+                style: const TextStyle(fontSize: 14, fontFamily: 'Figtree'),
+                icon: const Icon(Icons.arrow_drop_down, color: Colors.black),
+                items: _statusOptions.map((String status) {
+                  return DropdownMenuItem<String>(
+                    value: status,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: StatusIndicator(status: status),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _selectedStatus = value);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _button(String label, Color color, VoidCallback onTap, {bool isOutline = false}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 330,
-        height: 56,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isOutline ? Colors.white : color,
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: Colors.black.withAlpha(204), width: 2),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 20,
-            fontFamily: 'Figtree',
-            fontWeight: FontWeight.w500,
-            color: isOutline ? Colors.black.withAlpha(204) : const Color.fromARGB(255, 255, 255, 255),
-          ),
-        ),
+  Widget _label(String text, double fontSize, FontWeight fontWeight) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        fontFamily: 'Figtree',
       ),
     );
   }

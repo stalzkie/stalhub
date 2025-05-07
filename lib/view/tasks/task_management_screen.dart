@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../view_model/tasks/task_view_model.dart';
-import '../widgets/custom_bottom_navigation.dart';
-import '../widgets/status_indicator.dart';
 import '../../view_model/auth/login_view_model.dart';
+import '../widgets/custom_bottom_navigation.dart';
+import '../widgets/floating_global_menu.dart';
+import '../widgets/status_indicator.dart';
 
 class TaskManagementScreen extends StatefulWidget {
   const TaskManagementScreen({super.key});
@@ -15,35 +17,35 @@ class TaskManagementScreen extends StatefulWidget {
 
 class _TaskManagementScreenState extends State<TaskManagementScreen> {
   int currentIndex = 2;
+  late TaskViewModel taskViewModel;
+
+  @override
+  void initState() {
+    super.initState();
+    final loginVM = Provider.of<LoginViewModel>(context, listen: false);
+    taskViewModel = TaskViewModel(
+      userId: loginVM.loggedInUser?.id ?? '',
+      playerId: loginVM.loggedInUser?.playerId ?? '',
+    );
+    taskViewModel.fetchTasks(force: true);
+  }
 
   void onTabTapped(int index) {
-    setState(() => currentIndex = index);
-    switch (index) {
-      case 0:
-        Navigator.pushNamed(context, '/dashboard');
-        break;
-      case 1:
-        Navigator.pushNamed(context, '/sales');
-        break;
-      case 2:
-        break;
-      case 3:
-        Navigator.pushNamed(context, '/tickets');
-        break;
-      case 4:
-        Navigator.pushNamed(context, '/profile');
-        break;
+    if (index != currentIndex) {
+      final routes = ['/dashboard', '/invoices', '/tasks', '/tickets', '/profile'];
+      Navigator.pushNamed(context, routes[index]);
+      setState(() => currentIndex = index);
     }
+  }
+
+  Future<void> _onRefresh() async {
+    await taskViewModel.fetchTasks(force: true);
   }
 
   @override
   Widget build(BuildContext context) {
-    final loginVM = Provider.of<LoginViewModel>(context, listen: false);
-    final userId = loginVM.loggedInUser?.id ?? '';
-    final playerId = loginVM.loggedInUser?.playerId ?? '';
-
-    return ChangeNotifierProvider(
-      create: (_) => TaskViewModel(userId: userId, playerId: playerId)..fetchTasks(),
+    return ChangeNotifierProvider.value(
+      value: taskViewModel,
       child: Consumer<TaskViewModel>(
         builder: (context, vm, _) {
           final tasks = vm.filteredByDate.where((task) {
@@ -56,44 +58,56 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
                 task.status.toLowerCase().contains(q);
           }).toList();
 
-          return ScreenUtilInit(
-            designSize: const Size(390, 844),
-            builder: (_, __) => Scaffold(
-              backgroundColor: Colors.white,
-              body: Padding(
-                padding: EdgeInsets.fromLTRB(25.w, 40.h, 25.w, 10.h),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Image.asset('assets/images/stalwrites-logo.png', width: 122.11.w, height: 68.69.h),
-                    SizedBox(height: 20.h),
-                    _buildFilterBar(vm),
-                    SizedBox(height: 16.h),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _StatBox(label: 'Orders', value: vm.totalTasks),
-                        _StatBox(label: 'Working', value: vm.workingTasks),
-                        _StatBox(label: 'Delays', value: vm.delayedTasks),
-                      ],
-                    ),
-                    SizedBox(height: 10.h),
-                    _buildWriterBox(vm),
-                    SizedBox(height: 10.h),
-                    _buildAllTasksTitle(context),
-                    SizedBox(height: 10.h),
-                    _buildSearchBar(vm),
-                    SizedBox(height: 10.h),
-                    _buildTaskList(tasks),
-                    SizedBox(height: 6.h),
-                    _buildBottomButtons(context, vm),
-                  ],
+          return Scaffold(
+            backgroundColor: const Color(0xFFF9F9F9),
+            body: Stack(
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(25.w, 40.h, 25.w, 10.h),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(height: 20.h),
+                      _buildFilterBar(vm),
+                      SizedBox(height: 16.h),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _StatBox(label: 'Orders', value: vm.totalTasks),
+                          _StatBox(label: 'Working', value: vm.workingTasks),
+                          _StatBox(label: 'Delays', value: vm.delayedTasks),
+                        ],
+                      ),
+                      SizedBox(height: 10.h),
+                      _buildWriterBox(vm),
+                      SizedBox(height: 10.h),
+                      _buildAllTasksTitle(context),
+                      SizedBox(height: 10.h),
+                      _buildSearchBar(vm),
+                      SizedBox(height: 10.h),
+                      Expanded(
+                        child: RefreshIndicator(
+                          onRefresh: _onRefresh,
+                          child: ListView.builder(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            itemCount: tasks.length,
+                            padding: EdgeInsets.only(bottom: 20.h),
+                            itemBuilder: (context, index) {
+                              final task = tasks[index];
+                              return _buildTaskCard(task);
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              bottomNavigationBar: CustomBottomNavigation(
-                currentIndex: currentIndex,
-                onTap: onTabTapped,
-              ),
+                const FloatingMenuButton(),
+              ],
+            ),
+            bottomNavigationBar: CustomBottomNavigation(
+              currentIndex: currentIndex,
+              onTap: onTabTapped,
             ),
           );
         },
@@ -101,14 +115,63 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
     );
   }
 
+  Widget _buildTaskCard(task) {
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.pushNamed(context, '/edit-task', arguments: task);
+        if (mounted) {
+          await taskViewModel.fetchTasks(force: true);
+        }
+      },
+      child: Container(
+        margin: EdgeInsets.only(bottom: 10.h),
+        padding: EdgeInsets.all(12.w),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15.r),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Task ID: ${task.id}',
+                    style: TextStyle(
+                      fontSize: 18.sp,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Figtree',
+                    ),
+                  ),
+                ),
+                StatusIndicator(status: task.status),
+              ],
+            ),
+            SizedBox(height: 6.h),
+            Text(
+              task.taskName,
+              style: TextStyle(fontSize: 14.sp, fontFamily: 'Figtree'),
+            ),
+            SizedBox(height: 6.h),
+            Text(
+              'Due: ${DateFormat.yMMMd().format(task.dueDate)}',
+              style: TextStyle(fontSize: 14.sp, fontFamily: 'Figtree'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildFilterBar(TaskViewModel vm) {
     return Container(
-      height: 42.h,
       width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: 10.w),
+      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
       decoration: BoxDecoration(
-        color: const Color.fromARGB(255, 26, 26, 26),
-        borderRadius: BorderRadius.circular(10),
+        color: const Color(0xFFE2E2E2),
+        borderRadius: BorderRadius.circular(10.r),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -120,23 +183,21 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
             DateFilter.month: 'Month',
             DateFilter.all: 'All Time'
           }[filter]!;
+
           return GestureDetector(
             onTap: () => vm.setFilter(filter),
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
               decoration: isSelected
-                  ? BoxDecoration(
-                      color: const Color.fromARGB(255, 252, 252, 252),
-                      border: Border.all(color: Colors.black, width: 1),
-                      borderRadius: BorderRadius.circular(5),
-                    )
+                  ? BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(5.r))
                   : null,
               child: Text(
                 label,
                 style: TextStyle(
-                  color: isSelected ? const Color.fromARGB(255, 26, 26, 26) : Colors.white,
-                  fontSize: 14,
+                  color: isSelected ? Colors.black : Colors.black.withAlpha(128),
+                  fontSize: 14.sp,
                   fontFamily: 'Figtree',
+                  fontWeight: FontWeight.w400,
                 ),
               ),
             ),
@@ -151,32 +212,26 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
       width: double.infinity,
       padding: EdgeInsets.all(16.w),
       decoration: BoxDecoration(
-        color: const Color(0xFFEDEDED),
-        borderRadius: BorderRadius.circular(15),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15.r),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Most Productive Writer', style: TextStyle(
-            fontSize: 14.sp,
-            fontFamily: 'Figtree',
-            fontWeight: FontWeight.w600,
-            color: Colors.black.withAlpha(128),
-          )),
+          Text('Most Productive Writer',
+              style: TextStyle(
+                  fontSize: 14.sp,
+                  fontFamily: 'Figtree',
+                  fontWeight: FontWeight.w600,
+                  color: const Color.fromARGB(255, 173, 173, 173))),
           SizedBox(height: 4.h),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(vm.topWriterName, style: TextStyle(
-                fontSize: 24.sp,
-                fontFamily: 'Figtree',
-                fontWeight: FontWeight.w600,
-              )),
-              Text('${vm.topWriterPercentage.toStringAsFixed(1)}%', style: TextStyle(
-                fontSize: 24.sp,
-                fontFamily: 'Figtree',
-                fontWeight: FontWeight.w600,
-              )),
+              Text(vm.topWriterName,
+                  style: TextStyle(fontSize: 20.sp, fontFamily: 'Figtree', fontWeight: FontWeight.w600)),
+              Text('${vm.topWriterPercentage.toStringAsFixed(1)}%',
+                  style: TextStyle(fontSize: 20.sp, fontFamily: 'Figtree', fontWeight: FontWeight.w600)),
             ],
           ),
         ],
@@ -185,22 +240,18 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
   }
 
   Widget _buildAllTasksTitle(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        GestureDetector(
-          onTap: () => Navigator.pushNamed(context, '/all-tasks'),
-          child: Text(
-            'All Tasks',
-            style: TextStyle(
-              fontSize: 24.sp,
-              fontFamily: 'Figtree',
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.underline,
-            ),
-          ),
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, '/all-tasks'),
+      child: Text(
+        'All Tasks',
+        style: TextStyle(
+          fontSize: 20.sp,
+          fontWeight: FontWeight.w600,
+          fontFamily: 'Figtree',
+          decoration: TextDecoration.underline,
+          color: Colors.black,
         ),
-      ],
+      ),
     );
   }
 
@@ -210,99 +261,23 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
       padding: EdgeInsets.symmetric(horizontal: 10.w),
       decoration: BoxDecoration(
         color: const Color(0xFF525252),
-        borderRadius: BorderRadius.circular(5),
+        borderRadius: BorderRadius.circular(5.r),
       ),
       child: Row(
         children: [
           Expanded(
             child: TextField(
               onChanged: vm.updateSearchQuery,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: Colors.white, fontSize: 14.sp),
               decoration: InputDecoration(
                 hintText: 'Search tasks...',
-                hintStyle: TextStyle(color: Colors.white.withAlpha(128)),
+                hintStyle: TextStyle(color: Colors.white.withAlpha(128), fontSize: 14.sp),
                 border: InputBorder.none,
               ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildTaskList(List tasks) {
-    return Expanded(
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: ListView.builder(
-          padding: EdgeInsets.zero,
-          shrinkWrap: true,
-          itemCount: tasks.length,
-          itemBuilder: (_, index) {
-            final task = tasks[index];
-            return GestureDetector(
-              onTap: () => Navigator.pushNamed(context, '/edit-task', arguments: task),
-              child: Container(
-                width: double.infinity,
-                margin: EdgeInsets.symmetric(vertical: 6.h),
-                padding: EdgeInsets.all(10.w),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.black.withAlpha(128), width: 2),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Task ID: ${task.id}',
-                          style: TextStyle(
-                            fontSize: 24.sp,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'Figtree',
-                          ),
-                        ),
-                        StatusIndicator(status: task.status),
-                      ],
-                    ),
-                    SizedBox(height: 4.h),
-                    Text(task.taskName, style: TextStyle(fontSize: 14.sp), maxLines: null),
-                    SizedBox(height: 4.h),
-                    Text('Due: ${task.dueDate.toLocal().toString().split(" ")[0]}', style: TextStyle(fontSize: 14.sp)),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomButtons(BuildContext context, TaskViewModel vm) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        _ActionButton(
-          label: 'Analytics',
-          color: const Color(0xFFEDEDED),
-          onTap: () => Navigator.pushNamed(context, '/task-analytics'),
-          textColor: const Color.fromARGB(255, 26, 26, 26),
-        ),
-        _ActionButton(
-          label: 'Add Task',
-          color: const Color.fromARGB(255, 26, 26, 26),
-          onTap: () async {
-            final result = await Navigator.pushNamed(context, '/add-task');
-            if (result == true) {
-              vm.fetchTasks();  // Refresh tasks after adding
-            }
-          },
-        ),
-      ],
     );
   }
 }
@@ -317,50 +292,11 @@ class _StatBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500, fontFamily: 'Figtree')),
-        Text(value.toString(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500, fontFamily: 'Figtree')),
+        Text(label,
+            style: TextStyle(fontSize: 18.sp, fontFamily: 'Figtree', color: Colors.black.withAlpha(180))),
+        Text(value.toString(),
+            style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w500, fontFamily: 'Figtree')),
       ],
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-  final Color textColor;
-
-  const _ActionButton({
-    required this.label,
-    required this.color,
-    required this.onTap,
-    this.textColor = Colors.white,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 161.w,
-        height: 64.h,
-        alignment: Alignment.center,
-        padding: EdgeInsets.symmetric(horizontal: 20.w),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: Colors.black.withAlpha(128), width: 2),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w400,
-            fontFamily: 'Figtree',
-            color: textColor,
-          ),
-        ),
-      ),
     );
   }
 }

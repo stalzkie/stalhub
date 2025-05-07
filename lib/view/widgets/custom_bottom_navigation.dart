@@ -13,45 +13,36 @@ class CustomBottomNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconPaths = [
-      'assets/images/dashboard-icon.png',
-      'assets/images/wallet-icon.png',
-      'assets/images/tasks-icon.png',
-      'assets/images/client-icon.png',
-      'assets/images/profile-icon.png',
-    ];
-
-    final highlightColors = [
-      const Color.fromARGB(255, 100, 100, 100),
-      const Color.fromARGB(255, 100, 100, 100),
-      const Color.fromARGB(255, 100, 100, 100),
-      const Color.fromARGB(255, 100, 100, 100),
-      const Color.fromARGB(255, 100, 100, 100),
+    final items = [
+      {'icon': 'assets/images/dashboard-icon.png', 'label': 'Dashboard'},
+      {'icon': 'assets/images/wallet-icon.png', 'label': 'Invoices'},
+      {'icon': 'assets/images/tasks-icon.png', 'label': 'Tasks'},
+      {'icon': 'assets/images/client-icon.png', 'label': 'Tickets'},
+      {'icon': 'assets/images/profile-icon.png', 'label': 'Profile'},
     ];
 
     return Container(
-      width: 1.sw,
-      height: 78.h,
-      padding: EdgeInsets.all(10.h),
-      decoration: const BoxDecoration(color: Colors.black),
+      height: 70.h,
+      padding: EdgeInsets.symmetric(horizontal: 12.w),
+      color: Colors.white, // Removed decoration
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(iconPaths.length, (index) {
-          final isSelected = currentIndex == index;
+        children: List.generate(items.length, (index) {
+          final isSelected = index == currentIndex;
+          final color = isSelected ? const Color(0xFFFF7240) : Colors.grey;
+
           return GestureDetector(
             onTap: () => onTap(index),
-            child: Container(
-              width: 40.w,
-              height: 40.w,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10.r),
-                color: isSelected ? highlightColors[index] : Colors.transparent,
-              ),
-              padding: EdgeInsets.all(6.w),
-              child: Image.asset(
-                iconPaths[index],
-                fit: BoxFit.contain,
-                color: Colors.white,
+            child: AnimatedScale(
+              scale: isSelected ? 1.15 : 1.0,
+              duration: const Duration(milliseconds: 300),
+              child: ColorFiltered(
+                colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                child: Image.asset(
+                  items[index]['icon']!,
+                  width: 28.w,
+                  height: 28.w,
+                ),
               ),
             ),
           );

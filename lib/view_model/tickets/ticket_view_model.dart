@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/ticket_model.dart';
 import '../../core/services/notification_service.dart';
+import '../../data/repositories/user_repository.dart';
 
 enum DateFilter { today, week, month, all }
 
@@ -21,7 +22,10 @@ class TicketViewModel extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   DateFilter get selectedFilter => _selectedFilter;
 
-  Future<void> fetchTickets() async {
+  /// ✅ Now supports `force` parameter
+  Future<void> fetchTickets({bool force = false}) async {
+    if (_allTickets.isNotEmpty && !force) return;
+
     try {
       final response = await _client
           .from('tickets')
@@ -65,36 +69,39 @@ class TicketViewModel extends ChangeNotifier {
 
   Future<void> addTicket(Ticket ticket) async {
     await _client.from('tickets').insert(ticket.toJson());
-    await fetchTickets();
+    await fetchTickets(force: true);
 
-    if (playerId != null && playerId!.isNotEmpty) {
-      await NotificationService.sendNotification(
-        title: '📨 New Ticket Received',
-        message:
-            'Client: ${ticket.clientName}\nPlatform: ${ticket.platform}\nStatus: ${ticket.status}\nContent: ${ticket.content}',
-        playerId: playerId!,
-      );
-    }
+    final userRepo = UserRepository();
+    final playerIds = await userRepo.fetchAllPlayerIds();
+
+    await NotificationService.sendNotificationToMany(
+      title: '📨 New Ticket Received',
+      message:
+          'Client: ${ticket.clientName}\nPlatform: ${ticket.platform}\nStatus: ${ticket.status}\nContent: ${ticket.content}',
+      playerIds: playerIds,
+    );
   }
 
   Future<void> updateTicket(int id, Map<String, dynamic> data) async {
     await _client.from('tickets').update(data).eq('id', id);
-    await fetchTickets();
+    await fetchTickets(force: true);
 
     final updatedTicket = _allTickets.firstWhere((t) => t.id == id);
-    if (playerId != null && playerId!.isNotEmpty) {
-      await NotificationService.sendNotification(
-        title: '🛠️ Ticket Updated',
-        message:
-            'Client: ${updatedTicket.clientName}\nPlatform: ${updatedTicket.platform}\nStatus: ${updatedTicket.status}\nContent: ${updatedTicket.content}',
-        playerId: playerId!,
-      );
-    }
+
+    final userRepo = UserRepository();
+    final playerIds = await userRepo.fetchAllPlayerIds();
+
+    await NotificationService.sendNotificationToMany(
+      title: '🛠️ Ticket Updated',
+      message:
+          'Client: ${updatedTicket.clientName}\nPlatform: ${updatedTicket.platform}\nStatus: ${updatedTicket.status}\nContent: ${updatedTicket.content}',
+      playerIds: playerIds,
+    );
   }
 
   Future<void> deleteTicket(int id) async {
     await _client.from('tickets').delete().eq('id', id);
-    await fetchTickets();
+    await fetchTickets(force: true);
   }
 
   void updateSearchQuery(String value) {

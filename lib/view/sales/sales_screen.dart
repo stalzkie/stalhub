@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:stalhub/view_model/dashboard/dashboard_view_model.dart';
-import 'package:stalhub/view/widgets/custom_bottom_navigation.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:stalhub/view_model/dashboard/dashboard_view_model.dart';
+import 'package:stalhub/view_model/sales/invoice_view_model.dart' as invoice_vm;
+import 'package:stalhub/view/widgets/floating_global_menu.dart';
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
@@ -13,96 +14,107 @@ class SalesScreen extends StatefulWidget {
 }
 
 class _SalesScreenState extends State<SalesScreen> {
-  final int _currentIndex = 1;
-
-  void _onTap(int index) {
-    final routes = ['/dashboard', '/sales', '/tasks', '/tickets', '/profile'];
-    if (index != _currentIndex) {
-      Navigator.pushNamed(context, routes[index]);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => DashboardViewModel()..fetchDashboardData(),
-      child: Consumer<DashboardViewModel>(
-        builder: (context, vm, _) {
-          final sales = vm.totalSales;
-          final paid = vm.paidInvoices;
-          final unpaid = vm.unpaidInvoices;
-          final diff = vm.salesComparison;
-          final bestMonth = vm.bestSalesMonth;
-          final bestMonthYear = vm.bestSalesYear;
-          final bestMonthSales = vm.bestSalesAmount;
+    return ScreenUtilInit(
+      designSize: const Size(390, 844),
+      builder: (_, __) => MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => DashboardViewModel()..fetchDashboardData()),
+          ChangeNotifierProvider(create: (_) => invoice_vm.InvoiceViewModel(userId: '', playerId: '')..fetchInvoices()),
+        ],
+        child: Consumer2<DashboardViewModel, invoice_vm.InvoiceViewModel>(
+          builder: (context, dashboardVM, invoiceVM, _) {
+            final uniqueDays = dashboardVM.filteredInvoices
+                .map((e) => '${e.createdAt.year}-${e.createdAt.month}-${e.createdAt.day}')
+                .toSet()
+                .length;
+            final average = uniqueDays > 0 ? dashboardVM.totalSales / uniqueDays : 0.0;
 
-          return Scaffold(
-            backgroundColor: Colors.white,
-            body: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(25.w, 20.h, 25.w, 0),
-                      child: Column(
-                        children: [
-                          Image.asset('assets/images/stalwrites-logo.png', width: 122.w, height: 69.h),
-                          SizedBox(height: 20.h),
-                          _buildFilterBar(vm),
-                          SizedBox(height: 20.h),
-                          _sectionTitle('Sales'),
-                          _salesAmountCard(sales),
-                          SizedBox(height: 20.h),
-                          const Align(
-                            alignment: Alignment.centerLeft,
-                            child: TitleComparison(),
-                          ),
-                          _comparisonCard(diff),
-                          SizedBox(height: 20.h),
-                          YourBestMonth(month: bestMonth, year: bestMonthYear, amount: bestMonthSales),
-                          SizedBox(height: 20.h),
-                          _sectionTitle('Invoices'),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _invoiceCountBox('Paid', paid),
-                              _invoiceCountBox('Unpaid', unpaid),
-                            ],
-                          ),
-                          SizedBox(height: 20.h),
-                          const Buttons(),
-                          SizedBox(height: 10.h),
-                        ],
+            return Scaffold(
+              backgroundColor: const Color(0xFFF9F9F9),
+              body: SafeArea(
+                child: Stack(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 25.w, vertical: 24.h),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Back button
+                            Align(
+                              alignment: Alignment.topLeft,
+                              child: GestureDetector(
+                                onTap: () => Navigator.pushNamed(context, '/invoices'),
+                                child: Image.asset(
+                                  'assets/images/back-button-icon.png',
+                                  width: 32.w,
+                                  height: 32.w,
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: 16.h),
+
+                            _buildFilterBar(dashboardVM),
+                            SizedBox(height: 10.h),
+
+                            _buildCard("Sales", 'P ${NumberFormat("#,##0.00", "en_US").format(dashboardVM.totalSales)}'),
+                            SizedBox(height: 10.h),
+
+                            _buildCard("Average Revenue Per Day", 'P ${NumberFormat("#,##0.00", "en_US").format(average)}'),
+                            SizedBox(height: 10.h),
+
+                            _buildSalesComparison(dashboardVM.salesComparison),
+                            SizedBox(height: 10.h),
+
+                            _buildBestMonth(dashboardVM),
+                            SizedBox(height: 10.h),
+
+                            _invoicesSection(dashboardVM.paidInvoices, dashboardVM.unpaidInvoices),
+                            SizedBox(height: 10.h),
+
+                            // Most Valuable Client Card (from invoiceVM)
+                            _buildCard(
+                              'Most Valuable Client',
+                              '${dashboardVM.topClientName} - ${dashboardVM.topClientPercentage.toStringAsFixed(1)}%',
+                            ),
+
+                            SizedBox(height: 0.h),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
+                    const FloatingMenuButton(),
+                  ],
                 ),
-                CustomBottomNavigation(
-                  currentIndex: _currentIndex,
-                  onTap: _onTap,
-                )
-              ],
-            ),
-          );
-        },
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 
   Widget _buildFilterBar(DashboardViewModel vm) {
-    const filters = DateFilter.values;
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
       decoration: BoxDecoration(
-        color: const Color.fromARGB(255, 26, 26, 26),
+        color: const Color(0xFFE2E2E2),
         borderRadius: BorderRadius.circular(10.r),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: filters.map((filter) {
-          final isActive = vm.selectedFilter == filter;
-          final label = filter.name[0].toUpperCase() + filter.name.substring(1);
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: DateFilter.values.map((filter) {
+          final isSelected = vm.selectedFilter == filter;
+          final label = {
+            DateFilter.today: 'Today',
+            DateFilter.week: 'Week',
+            DateFilter.month: 'Month',
+            DateFilter.all: 'All Time'
+          }[filter]!;
+
           return GestureDetector(
             onTap: () async {
               vm.setFilter(filter);
@@ -110,17 +122,19 @@ class _SalesScreenState extends State<SalesScreen> {
             },
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-              decoration: BoxDecoration(
-                color: isActive ? Colors.white : Colors.transparent,
-                borderRadius: BorderRadius.circular(5.r),
-                border: isActive ? Border.all(color: Colors.black, width: 1) : null,
-              ),
+              decoration: isSelected
+                  ? BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(5.r),
+                    )
+                  : null,
               child: Text(
                 label,
                 style: TextStyle(
-                  color: isActive ? const Color.fromARGB(255, 26, 26, 26) : Colors.white,
+                  color: isSelected ? Colors.black : Colors.black.withAlpha(128),
                   fontSize: 14.sp,
                   fontFamily: 'Figtree',
+                  fontWeight: FontWeight.w400,
                 ),
               ),
             ),
@@ -130,172 +144,90 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  Widget _sectionTitle(String title) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 24.sp,
-          fontFamily: 'Figtree',
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
-  Widget _salesAmountCard(double amount) {
+  Widget _buildCard(String title, String content) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(10.w),
-      decoration: _cardDecoration(),
-      child: Row(
-        children: [
-          Text('P', style: TextStyle(fontSize: 32.sp, fontWeight: FontWeight.w600)),
-          SizedBox(width: 10.w),
-          Text(
-            NumberFormat("#,##0.00", "en_US").format(amount),
-            style: TextStyle(fontSize: 32.sp, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _comparisonCard(double diff) {
-    final isPositive = diff >= 0;
-    final symbol = isPositive ? '+' : '–';
-    final color = isPositive ? Colors.green : const Color(0xFFFF0000);
-
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(10.w),
-      decoration: _cardDecoration(),
-      child: Text(
-        '$symbol${NumberFormat("#,##0.00", "en_US").format(diff.abs())}',
-        style: TextStyle(fontSize: 32.sp, color: color, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  Widget _invoiceCountBox(String label, int count) {
-    return Container(
-      width: 156.w,
-      height: 126.h,
-      padding: EdgeInsets.all(20.w),
-      decoration: ShapeDecoration(
-        color: const Color(0xFFEDEDED),
-        shape: RoundedRectangleBorder(
-          side: BorderSide(width: 2, color: Colors.black.withAlpha(128)),
-          borderRadius: BorderRadius.circular(15.r),
-        ),
+      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15.r),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            label,
+            title,
             style: TextStyle(
-              color: Colors.black,
-              fontSize: 15.sp,
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w600,
               fontFamily: 'Figtree',
-              fontWeight: FontWeight.w300,
+              color: const Color.fromARGB(255, 173, 173, 173),
             ),
           ),
           SizedBox(height: 10.h),
-          Center(
-            child: Text(
-              '$count',
-              style: TextStyle(fontSize: 32.sp, fontWeight: FontWeight.w400),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  BoxDecoration _cardDecoration() {
-    return BoxDecoration(
-      color: Colors.white,
-      border: Border.all(color: Colors.black.withAlpha(128), width: 2),
-      borderRadius: BorderRadius.circular(15.r),
-    );
-  }
-}
-
-class TitleComparison extends StatelessWidget {
-  const TitleComparison({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 67.h,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
           Text(
-            'Sales Comparison',
+            content,
             style: TextStyle(
-              color: Colors.black,
-              fontSize: 24.sp,
-              fontFamily: 'Figtree',
+              fontSize: 20.sp,
               fontWeight: FontWeight.w600,
-            ),
-          ),
-          Text(
-            'vs previous',
-            style: TextStyle(
-              color: Colors.black.withAlpha(128),
-              fontSize: 15.sp,
               fontFamily: 'Figtree',
-              fontWeight: FontWeight.w500,
+              color: Colors.black,
             ),
           ),
         ],
       ),
     );
   }
-}
 
-class YourBestMonth extends StatelessWidget {
-  final String month;
-  final int year;
-  final double amount;
+  Widget _buildSalesComparison(double comparison) {
+    final symbol = comparison >= 0 ? '+' : '–';
+    return _buildCard(
+      'Sales Comparison',
+      '$symbol${NumberFormat("#,##0.00", "en_US").format(comparison.abs())}',
+    );
+  }
 
-  const YourBestMonth({super.key, required this.month, required this.year, required this.amount});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildBestMonth(DashboardViewModel vm) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
-      decoration: ShapeDecoration(
-        color: const Color(0xFFEDEDED),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15.r),
-        ),
+      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15.r),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Your Best Month',
+            'Best Month',
             style: TextStyle(
-              color: Colors.black54,
-              fontSize: 14.sp,
+              fontSize: 16.sp,
               fontWeight: FontWeight.w600,
+              fontFamily: 'Figtree',
+              color: const Color.fromARGB(255, 173, 173, 173),
             ),
           ),
-          SizedBox(height: 5.h),
+          SizedBox(height: 10.h),
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(month, style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w600)),
-              SizedBox(width: 10.w),
-              Text('$year', style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w600)),
-              SizedBox(width: 20.w),
               Text(
-                'P${NumberFormat("#,##0.00", "en_US").format(amount)}',
-                style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w600),
+                '${vm.bestSalesMonth} ${vm.bestSalesYear}',
+                style: TextStyle(
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Figtree',
+                  color: Colors.black,
+                ),
+              ),
+              Text(
+                'P ${NumberFormat("#,##0.00", "en_US").format(vm.bestSalesAmount)}',
+                style: TextStyle(
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Figtree',
+                  color: Colors.black,
+                ),
               ),
             ],
           ),
@@ -303,56 +235,61 @@ class YourBestMonth extends StatelessWidget {
       ),
     );
   }
-}
 
-class Buttons extends StatelessWidget {
-  const Buttons({super.key});
+  Widget _invoicesSection(int paid, int unpaid) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Invoices',
+          style: TextStyle(
+            color: const Color.fromARGB(255, 156, 156, 156),
+            fontSize: 16.sp,
+            fontFamily: 'Figtree',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        SizedBox(height: 10.h),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _invoiceBox('Paid', paid),
+            _invoiceBox('Unpaid', unpaid),
+          ],
+        ),
+      ],
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 5.w),
+  Widget _invoiceBox(String label, int count) {
+    return Container(
+      width: 161.w,
+      height: 80.h,
+      padding: EdgeInsets.all(16.w),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15.r),
+      ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () => Navigator.pushNamed(context, '/invoices'),
-              child: Container(
-                height: 64.h,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEDEDED),
-                  borderRadius: BorderRadius.circular(15.r),
-                  border: Border.all(color: Colors.black.withAlpha(128), width: 2),
-                ),
-                child: Text(
-                  'Invoice',
-                  style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w500),
-                ),
-              ),
+          Text(
+            label,
+            style: TextStyle(
+              color: const Color.fromARGB(255, 173, 173, 173),
+              fontSize: 16.sp,
+              fontFamily: 'Figtree',
+              fontWeight: FontWeight.w600,
             ),
           ),
-          SizedBox(width: 10.w),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => Navigator.pushNamed(context, '/add-invoice'),
-              child: Container(
-                height: 64.h,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: const Color.fromARGB(255, 26, 26, 26),
-                  borderRadius: BorderRadius.circular(15.r),
-                  border: Border.all(color: Colors.black.withAlpha(128), width: 2),
-                ),
-                child: Text(
-                  'Add Invoice',
-                  style: TextStyle(
-                    fontSize: 20.sp,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
+          SizedBox(width: 20.w),
+          Text(
+            '$count',
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: 20.sp,
+              fontFamily: 'Figtree',
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],

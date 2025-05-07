@@ -42,7 +42,7 @@ class LoginViewModel extends ChangeNotifier {
           'role': userData['role'],
           'profile_pic': userData['profile_pic'] ?? '', // Optional/default
           'created_at': userData['created_at'],
-          'onesignal_player_id': userData['onesignal_player_id'],
+          'player_id': userData['player_id'],
         });
 
         await _saveOneSignalPlayerId(_loggedInUser!.id);
@@ -80,7 +80,7 @@ class LoginViewModel extends ChangeNotifier {
       if (playerId != null && playerId.isNotEmpty && userId.isNotEmpty) {
         await Supabase.instance.client
             .from('users')
-            .update({'onesignal_player_id': playerId})
+            .update({'player_id': playerId})
             .eq('id', userId);
 
         debugPrint('✅ Player ID saved to Supabase.');

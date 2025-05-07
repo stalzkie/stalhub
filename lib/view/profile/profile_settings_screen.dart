@@ -41,182 +41,162 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         _phoneController.text = vm.phoneNumber ?? '';
 
         return Scaffold(
-          backgroundColor: Colors.white,
+          backgroundColor: const Color(0xFFF9F9F9),
           body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 40),
-              child: Column(
-                children: [
-                  Image.asset('assets/images/stalwrites-logo.png', width: 122, height: 68),
-                  const SizedBox(height: 20),
-                  Container(
-                    width: 119,
-                    height: 119,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.black.withAlpha(128), width: 2),
-                      color: const Color(0xFFEDEDED),
-                      image: vm.profilePic != null && vm.profilePic!.isNotEmpty
-                          ? DecorationImage(image: NetworkImage(vm.profilePic!), fit: BoxFit.cover)
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEDEDED),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 20),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.only(bottom: 100),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("Profile Information",
-                            style: TextStyle(
-                              color: Colors.black.withAlpha(128),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              fontFamily: 'Figtree',
-                            )),
+                        const SizedBox(height: 12),
+                        Container(
+                          width: 119,
+                          height: 119,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.black.withAlpha(128), width: 2),
+                            color: const Color(0xFFEDEDED),
+                            image: vm.profilePic != null && vm.profilePic!.isNotEmpty
+                                ? DecorationImage(image: NetworkImage(vm.profilePic!), fit: BoxFit.cover)
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text("Profile Information",
+                                  style: TextStyle(
+                                    color: Colors.black.withAlpha(128),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Figtree',
+                                  )),
+                              const SizedBox(height: 16),
+                              isEditing
+                                  ? Column(
+                                      children: [
+                                        _editableField("Name", _nameController),
+                                        _editableField("Email", _emailController),
+                                        _editableField("Phone Number", _phoneController),
+                                      ],
+                                    )
+                                  : Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(vm.name ?? "Name", style: _textStyle(20)),
+                                        const SizedBox(height: 8),
+                                        Text(vm.role ?? "Company Role", style: _textStyle(16)),
+                                        const SizedBox(height: 8),
+                                        Text(vm.email ?? "Email", style: _textStyle(16)),
+                                        const SizedBox(height: 8),
+                                        Text(vm.phoneNumber ?? "Phone Number", style: _textStyle(16)),
+                                      ],
+                                    ),
+                              if (isEditing) ...[
+                                const SizedBox(height: 16),
+                                GestureDetector(
+                                  onTap: () async {
+                                    final id = loginVM.loggedInUser?.id;
+                                    if (id != null) {
+                                      await vm.updateProfile(
+                                        userId: id,
+                                        updatedName: _nameController.text,
+                                        updatedEmail: _emailController.text,
+                                        updatedPhone: _phoneController.text,
+                                      );
+                                      setState(() => isEditing = false);
+                                    }
+                                  },
+                                  child: Container(
+                                    height: 48,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFF7240),
+                                      borderRadius: BorderRadius.circular(15),
+                                      border: Border.all(color: Colors.black, width: 2),
+                                    ),
+                                    child: const Text(
+                                      'Save Changes',
+                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.black),
+                                    ),
+                                  ),
+                                ),
+                              ]
+                            ],
+                          ),
+                        ),
                         const SizedBox(height: 16),
-                        isEditing
-                            ? Column(
-                                children: [
-                                  _editableField("Name", _nameController),
-                                  _editableField("Email", _emailController),
-                                  _editableField("Phone Number", _phoneController),
-                                ],
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(vm.name ?? "Name", style: _textStyle(20)),
-                                  const SizedBox(height: 8),
-                                  Text(vm.role ?? "Company Role", style: _textStyle(16)),
-                                  const SizedBox(height: 8),
-                                  Text(vm.email ?? "Email", style: _textStyle(16)),
-                                  const SizedBox(height: 8),
-                                  Text(vm.phoneNumber ?? "Phone Number", style: _textStyle(16)),
-                                ],
-                              ),
-                        if (isEditing) ...[
-                          const SizedBox(height: 16),
-                          GestureDetector(
-                            onTap: () async {
-                              final id = loginVM.loggedInUser?.id;
-                              if (id != null) {
-                                await vm.updateProfile(
-                                  userId: id,
-                                  updatedName: _nameController.text,
-                                  updatedEmail: _emailController.text,
-                                  updatedPhone: _phoneController.text,
-                                );
-                                setState(() => isEditing = false);
-                              }
-                            },
-                            child: Container(
-                              height: 48,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: const Color.fromARGB(255, 26, 26, 26),
-                                borderRadius: BorderRadius.circular(15),
-                                border: Border.all(color: Colors.black, width: 2),
-                              ),
-                              child: const Text(
-                                'Save Changes',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color.fromARGB(255, 255, 255, 255)),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _outlinedButton(
+                                isEditing ? "Cancel" : "Edit your profile",
+                                () => setState(() => isEditing = !isEditing),
                               ),
                             ),
-                          ),
-                        ]
+                            const SizedBox(width: 15),
+                            Expanded(
+                              child: _outlinedButton("Change Password", () {
+                                final userId = loginVM.loggedInUser?.id;
+                                if (userId != null) _showChangePasswordModal(userId);
+                              }),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _outlinedButton("Export Files To CSV", () => Navigator.pushNamed(context, '/export')),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _outlinedButton(
-                          isEditing ? "Cancel" : "Edit your profile",
-                          () => setState(() => isEditing = !isEditing),
+                ),
+
+                // ✅ Sign Out Button pinned above nav bar
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(25, 0, 25, 25),
+                    child: GestureDetector(
+                      onTap: () async {
+                        await Supabase.instance.client.auth.signOut();
+                        Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+                      },
+                      child: Container(
+                        height: 48,
+                        width: double.infinity,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color.fromARGB(255, 231, 42, 42),
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: Colors.black, width: 2),
+                        ),
+                        child: const Text(
+                          'Sign Out',
+                          style: TextStyle(fontSize: 18, fontFamily: 'Figtree', color: Colors.black),
                         ),
                       ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: _outlinedButton("Change Password", () {
-                          final userId = loginVM.loggedInUser?.id;
-                          if (userId != null) _showChangePasswordModal(userId);
-                        }),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // ✅ Sign Out Button Inserted Here
-                  GestureDetector(
-                    onTap: () async {
-                      await Supabase.instance.client.auth.signOut();
-                      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-                    },
-                    child: Container(
-                      height: 64,
-                      width: double.infinity,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: Colors.red[600],
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.black, width: 2),
-                      ),
-                      child: const Text(
-                        'Sign Out',
-                        style: TextStyle(fontSize: 20, fontFamily: 'Figtree', color: Colors.white),
-                      ),
                     ),
                   ),
-
-                  const SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: () => Navigator.pushNamed(context, '/export'),
-                    child: Container(
-                      height: 64,
-                      width: double.infinity,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: const Color.fromARGB(255, 26, 26, 26),
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.black, width: 2),
-                      ),
-                      child: const Text(
-                        'Export Files To CSV',
-                        style: TextStyle(fontSize: 20, fontFamily: 'Figtree', color: Color.fromARGB(255, 255, 255, 255)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           bottomNavigationBar: CustomBottomNavigation(
             currentIndex: currentIndex,
             onTap: (index) {
               setState(() => currentIndex = index);
-              switch (index) {
-                case 0:
-                  Navigator.pushReplacementNamed(context, '/dashboard');
-                  break;
-                case 1:
-                  Navigator.pushReplacementNamed(context, '/sales');
-                  break;
-                case 2:
-                  Navigator.pushReplacementNamed(context, '/tasks');
-                  break;
-                case 3:
-                  Navigator.pushReplacementNamed(context, '/tickets');
-                  break;
-                case 4:
-                  break;
-              }
+              final routes = ['/dashboard', '/invoices', '/tasks', '/tickets', '/profile'];
+              if (index != 4) Navigator.pushReplacementNamed(context, routes[index]);
             },
           ),
         );
@@ -253,7 +233,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Change Password", style: TextStyle(fontFamily: 'Figtree', fontWeight: FontWeight.w500)),
+        title: const Text("Change Password", style: TextStyle(fontFamily: 'Figtree', fontWeight: FontWeight.w600)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -284,11 +264,11 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color.fromARGB(255, 26, 26, 26),
+                color: const Color(0xFFFF7240),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.black),
               ),
-              child: const Text("Confirm", style: TextStyle(color: Color.fromARGB(255, 255, 255, 255))),
+              child: const Text("Confirm", style: TextStyle(color: Colors.black)),
             ),
           ),
         ],
@@ -327,16 +307,16 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.black.withAlpha(128), width: 2),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: const Color.fromARGB(255, 228, 228, 228), width: 2),
         ),
         child: Text(
           label,
-          style: TextStyle(
-            fontSize: 13,
+          style: const TextStyle(
+            fontSize: 16,
             fontFamily: 'Figtree',
-            fontWeight: FontWeight.w300,
-            color: Colors.black.withAlpha(204),
+            fontWeight: FontWeight.w400,
+            color: Colors.black,
           ),
         ),
       ),

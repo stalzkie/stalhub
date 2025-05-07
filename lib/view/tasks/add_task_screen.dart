@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:stalhub/view_model/tasks/task_view_model.dart';
 import '../../../data/models/task_model.dart';
-import '../../../view_model/auth/login_view_model.dart';  // ✅ Add this
+import '../../../view_model/tasks/task_view_model.dart';
+import 'package:stalhub/view/widgets/status_indicator.dart';
 
 class AddTaskScreen extends StatefulWidget {
   const AddTaskScreen({super.key});
@@ -14,12 +14,10 @@ class AddTaskScreen extends StatefulWidget {
 
 class _AddTaskScreenState extends State<AddTaskScreen> {
   final _formKey = GlobalKey<FormState>();
-
   final _taskNameController = TextEditingController();
   final _clientNameController = TextEditingController();
   final _assignedToController = TextEditingController();
   final _priceController = TextEditingController();
-  final _statusController = TextEditingController();
   final _platformController = TextEditingController();
   final _fileLinkController = TextEditingController();
   final _notesController = TextEditingController();
@@ -27,6 +25,14 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   final DateTime _createdAt = DateTime.now();
   DateTime? _dueDate;
   int? _taskId;
+  bool _submitted = false;
+  bool _isLoading = false;
+
+  String _selectedStatus = 'To Be Assigned';
+  final List<String> _statusOptions = [
+    'Delivered', 'Working', 'Quality Checking', 'Postponed', 'Revision',
+    'Discarded', 'To Be Assigned', 'To Be Delivered',
+  ];
 
   @override
   void initState() {
@@ -35,11 +41,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   }
 
   Future<void> _fetchNextTaskId() async {
-    final loginVM = Provider.of<LoginViewModel>(context, listen: false);  // ✅ Get userId/playerId
-    final vm = TaskViewModel(
-      userId: loginVM.loggedInUser?.id ?? '',
-      playerId: loginVM.loggedInUser?.playerId ?? '',
-    );
+    final vm = Provider.of<TaskViewModel>(context, listen: false);
     await vm.fetchTasks();
     final tasks = vm.allTasks;
     setState(() {
@@ -48,134 +50,202 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   }
 
   Future<void> _submitForm() async {
-    if (_formKey.currentState?.validate() != true) return;
-    if (_dueDate == null || _taskId == null) return;
+    if (_isLoading) return;
+    setState(() {
+      _submitted = true;
+      _isLoading = true;
+    });
+
+    final isEmptyRequired = _taskNameController.text.isEmpty ||
+        _clientNameController.text.isEmpty ||
+        _assignedToController.text.isEmpty ||
+        _priceController.text.isEmpty ||
+        _platformController.text.isEmpty ||
+        _dueDate == null;
+
+    if (isEmptyRequired || _taskId == null) {
+      _showErrorDialog("Please fill up all the required information.");
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    final parsedPrice = double.tryParse(_priceController.text);
+    if (parsedPrice == null) {
+      _showErrorDialog("Please enter a valid number for Price.");
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    if (_formKey.currentState?.validate() != true) {
+      setState(() => _isLoading = false);
+      return;
+    }
 
     final task = Task(
       id: _taskId!,
       taskName: _taskNameController.text,
       clientName: _clientNameController.text,
       assignedTo: _assignedToController.text,
-      price: double.tryParse(_priceController.text) ?? 0,
-      status: _statusController.text,
+      price: parsedPrice,
+      status: _selectedStatus,
       platform: _platformController.text,
-      createdAt: _createdAt,
-      dueDate: _dueDate!,
       fileLink: _fileLinkController.text,
       notes: _notesController.text,
+      createdAt: _createdAt,
+      dueDate: _dueDate!,
     );
 
-    final loginVM = Provider.of<LoginViewModel>(context, listen: false);  // ✅ Get userId/playerId
-    final vm = TaskViewModel(
-      userId: loginVM.loggedInUser?.id ?? '',
-      playerId: loginVM.loggedInUser?.playerId ?? '',
-    );
+    final vm = Provider.of<TaskViewModel>(context, listen: false);
+    await vm.addTask(task);
+    await vm.fetchTasks();
 
-    await vm.addTask(task);  // 🔔 Notification should trigger here
-    if (context.mounted) Navigator.pop(context, true);  // ✅ Return true to refresh
+    if (context.mounted) Navigator.pop(context, true);
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Invalid Input"),
+        content: Text(message),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: _taskId == null
-          ? const Center(child: CircularProgressIndicator())
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                    child: IntrinsicHeight(
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 40),
-                          Image.asset(
-                            'assets/images/stalwrites-logo.png',
-                            width: 122,
-                            height: 68,
-                          ),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.fromLTRB(30, 40, 30, 40),
-                            decoration: ShapeDecoration(
-                              color: const Color(0xFFEDEDED),
-                              shape: RoundedRectangleBorder(
-                                side: BorderSide(width: 2, color: Colors.black.withAlpha(128)),
-                                borderRadius: const BorderRadius.only(
-                                  topLeft: Radius.circular(50),
-                                  topRight: Radius.circular(50),
-                                ),
-                              ),
+      backgroundColor: const Color(0xFFF9F9F9),
+      body: Stack(
+        children: [
+          _taskId == null
+              ? const Center(child: CircularProgressIndicator())
+              : SafeArea(
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () => Navigator.pop(context),
+                              child: Image.asset('assets/images/back-button-icon.png', width: 32, height: 32),
                             ),
-                            child: Form(
-                              key: _formKey,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  _labelText("Task ID: $_taskId", bold: true),
-                                  const SizedBox(height: 8),
-                                  _textInput("Task Name", controller: _taskNameController),
-                                  _textInput("Client Name", controller: _clientNameController),
-                                  _textInput("Assigned To", controller: _assignedToController),
-                                  _textInput("Price", controller: _priceController, keyboard: TextInputType.number),
-                                  _textInput("Status", controller: _statusController),
-                                  _textInput("Platform", controller: _platformController),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _labelText(DateFormat.yMMMd().format(_createdAt)),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: ElevatedButton(
-                                          style: ElevatedButton.styleFrom(
-                                            side: BorderSide(width: 2, color: Colors.black.withAlpha(128)),
-                                            backgroundColor: const Color.fromARGB(255, 255, 255, 255),
-                                            foregroundColor: const Color.fromARGB(255, 0, 0, 0),
-                                          ),
-                                          onPressed: () async {
-                                            final picked = await showDatePicker(
-                                              context: context,
-                                              initialDate: DateTime.now(),
-                                              firstDate: DateTime(2020),
-                                              lastDate: DateTime(2100),
-                                            );
-                                            if (picked != null) {
-                                              setState(() => _dueDate = picked);
-                                            }
-                                          },
-                                          child: Text(_dueDate == null ? "Select Due" : DateFormat.yMMMd().format(_dueDate!)),
-                                        ),
-                                      )
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _textInput("File Link (optional)", controller: _fileLinkController),
-                                  const SizedBox(height: 8),
-                                  _textInput("Notes (optional)", controller: _notesController, maxLines: 3),
-                                  const SizedBox(height: 20),
-                                  _button("Add Task", const Color.fromARGB(255, 26, 26, 26), _submitForm),
-                                  const SizedBox(height: 10),
-                                  _button("Go Back", Colors.white, () => Navigator.pop(context), isOutline: true),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
+                          child: Form(
+                            key: _formKey,
+                            autovalidateMode: _submitted ? AutovalidateMode.always : AutovalidateMode.disabled,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _label("Task ID: $_taskId", 20, FontWeight.w600),
+                                _input("Task Name", _taskNameController),
+                                _input("Client Name", _clientNameController),
+                                _input("Assigned To", _assignedToController),
+                                _input("Price", _priceController, keyboard: TextInputType.number),
+                                _dropdownStatusField(),
+                                _input("Platform", _platformController),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(child: _label("Created: ${DateFormat.yMMMd().format(_createdAt)}", 14, FontWeight.w500)),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.white,
+                                          foregroundColor: Colors.black,
+                                          side: BorderSide(
+                                            color: (_dueDate == null && _submitted)
+                                                ? Colors.red
+                                                : Colors.black.withAlpha(128),
+                                            width: 2,
+                                          ),
+                                        ),
+                                        onPressed: () async {
+                                          final picked = await showDatePicker(
+                                            context: context,
+                                            initialDate: DateTime.now(),
+                                            firstDate: DateTime(2020),
+                                            lastDate: DateTime(2100),
+                                          );
+                                          if (picked != null) {
+                                            setState(() => _dueDate = picked);
+                                          }
+                                        },
+                                        child: Text(
+                                          _dueDate == null ? "Select Due Date" : DateFormat.yMMMd().format(_dueDate!),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                _input("File Link (optional)", _fileLinkController),
+                                _input("Notes (optional)", _notesController, maxLines: 3),
+                                const SizedBox(height: 80),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              },
+                ),
+          if (_isLoading)
+            Container(
+              color: Colors.white.withOpacity(0.8),
+              child: const Center(
+                child: SizedBox(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFFFF7240),
+                    strokeWidth: 6,
+                  ),
+                ),
+              ),
             ),
+        ],
+      ),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(25, 0, 25, 25),
+        child: GestureDetector(
+          onTap: _submitForm,
+          child: Container(
+            height: 48,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF7240),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.black.withAlpha(204), width: 2),
+            ),
+            child: const Text(
+              'Add Task',
+              style: TextStyle(
+                fontSize: 18,
+                fontFamily: 'Figtree',
+                fontWeight: FontWeight.w500,
+                color: Colors.black,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _textInput(String hint, {TextEditingController? controller, int maxLines = 1, TextInputType? keyboard}) {
+  Widget _input(String hint, TextEditingController controller,
+      {int maxLines = 1, TextInputType? keyboard}) {
+    final isOptional = hint.toLowerCase().contains("optional");
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: TextFormField(
         controller: controller,
         maxLines: maxLines,
@@ -184,52 +254,76 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           hintText: hint,
           filled: true,
           fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(color: Colors.black.withAlpha(100)),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: (_submitted && !isOptional && controller.text.isEmpty)
+                ? const BorderSide(color: Colors.red)
+                : BorderSide.none,
           ),
         ),
         validator: (value) {
-          if (hint.contains("optional")) return null;
+          if (isOptional) return null;
           return (value == null || value.isEmpty) ? "Required" : null;
         },
       ),
     );
   }
 
-  Widget _labelText(String text, {bool bold = false}) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: bold ? 20 : 14,
-        fontWeight: bold ? FontWeight.bold : FontWeight.w400,
-        fontFamily: 'Figtree',
+  Widget _dropdownStatusField() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Status', style: TextStyle(fontSize: 14, fontFamily: 'Figtree', fontWeight: FontWeight.w500)),
+            DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedStatus,
+                dropdownColor: Colors.white,
+                borderRadius: BorderRadius.circular(15),
+                elevation: 6,
+                style: const TextStyle(fontSize: 14, fontFamily: 'Figtree'),
+                icon: const Icon(Icons.arrow_drop_down, color: Colors.black),
+                items: _statusOptions.map((String status) {
+                  return DropdownMenuItem<String>(
+                    value: status,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: StatusIndicator(status: status),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _selectedStatus = value);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _button(String label, Color color, VoidCallback onTap, {bool isOutline = false}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 330,
-        height: 56,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isOutline ? Colors.white : color,
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: Colors.black.withAlpha(204), width: 2),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 20,
-            fontFamily: 'Figtree',
-            fontWeight: FontWeight.w400,
-            color: isOutline ? Colors.black.withAlpha(204) : const Color.fromARGB(255, 255, 255, 255),
-          ),
-        ),
+  Widget _label(String text, double fontSize, FontWeight fontWeight) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        fontFamily: 'Figtree',
       ),
     );
   }

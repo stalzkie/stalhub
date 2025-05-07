@@ -1,3 +1,4 @@
+// ... keep all existing imports
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -137,7 +138,6 @@ class _ExportCsvScreenState extends State<ExportCsvScreen> {
       final file = File('${downloadsDir.path}/$fileName');
       await file.writeAsString(const ListToCsvConverter().convert(rows));
 
-      // Log the export to Supabase
       await ExportRepository().addExportRecord(
         ExportRecord(
           id: const Uuid().v4(),
@@ -168,21 +168,21 @@ class _ExportCsvScreenState extends State<ExportCsvScreen> {
       onTap: () => setState(() => selectedData = label),
       child: Container(
         width: double.infinity,
-        height: 64,
+        height: 48,
         margin: const EdgeInsets.symmetric(vertical: 8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF1A1A1A) : const Color(0xFFEDEDED),
+          color: isSelected ? const Color(0xFFFF7240) : Colors.white,
           borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: Colors.black.withAlpha(128), width: 2),
+          border: Border.all(color: const Color.fromARGB(255, 228, 228, 228), width: 2),
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 20,
+            fontSize: 18,
             fontFamily: 'Figtree',
             fontWeight: FontWeight.w400,
-            color: isSelected ? Colors.white : Colors.black,
+            color: isSelected ? const Color.fromARGB(255, 0, 0, 0) : Colors.black,
           ),
         ),
       ),
@@ -192,115 +192,109 @@ class _ExportCsvScreenState extends State<ExportCsvScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF9F9F9),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 40),
-          child: Column(
-            children: [
-              Image.asset('assets/images/stalwrites-logo.png', width: 122, height: 68),
-              const SizedBox(height: 30),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Choose Your Data',
-                  style: TextStyle(fontSize: 24, fontFamily: 'Figtree', fontWeight: FontWeight.w600),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 20),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 120),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ✅ Back Button (Icon Image)
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Image.asset(
+                        'assets/images/back-button-icon.png',
+                        width: 32,
+                        height: 32,
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                    const Text('Choose Your Data',
+                        style: TextStyle(fontSize: 24, fontFamily: 'Figtree', fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 10),
+                    _buildDataOption('Invoices'),
+                    _buildDataOption('Customer Tickets'),
+                    _buildDataOption('Tasks'),
+                    const SizedBox(height: 20),
+                    const Text('Select Date Range',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFamily: 'Figtree')),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _selectDate(context, true),
+                            child: Container(
+                              height: 50,
+                              padding: const EdgeInsets.symmetric(horizontal: 15),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                border: Border.all(color: const Color.fromARGB(255, 228, 228, 228), width: 2),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                startDate == null ? 'Start Date' : DateFormat.yMMMd().format(startDate!),
+                                style: const TextStyle(fontFamily: 'Figtree'),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _selectDate(context, false),
+                            child: Container(
+                              height: 50,
+                              padding: const EdgeInsets.symmetric(horizontal: 15),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                border: Border.all(color: const Color.fromARGB(255, 228, 228, 228), width: 2),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                endDate == null ? 'End Date' : DateFormat.yMMMd().format(endDate!),
+                                style: const TextStyle(fontFamily: 'Figtree'),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
-              _buildDataOption('Invoices'),
-              _buildDataOption('Customer Tickets'),
-              _buildDataOption('Tasks'),
-              const SizedBox(height: 20),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Select Date Range',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+
+            // ✅ Export Button pinned to bottom
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(25, 0, 25, 25),
+                child: GestureDetector(
+                  onTap: _exportCsv,
+                  child: Container(
+                    height: 48,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A1A),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: Colors.black, width: 2),
+                    ),
+                    child: const Text(
+                      'Export Your Files',
+                      style: TextStyle(fontSize: 18, color: Colors.white, fontFamily: 'Figtree'),
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => _selectDate(context, true),
-                      child: Container(
-                        height: 40,
-                        padding: const EdgeInsets.symmetric(horizontal: 15),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.black),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          startDate == null ? 'Start Date' : DateFormat.yMMMd().format(startDate!),
-                          style: const TextStyle(fontFamily: 'Figtree'),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => _selectDate(context, false),
-                      child: Container(
-                        height: 40,
-                        padding: const EdgeInsets.symmetric(horizontal: 15),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.black),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          endDate == null ? 'End Date' : DateFormat.yMMMd().format(endDate!),
-                          style: const TextStyle(fontFamily: 'Figtree'),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 30),
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      width: 64,
-                      height: 64,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEDEDED),
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.black.withAlpha(128), width: 2),
-                      ),
-                      child: const Text('←', style: TextStyle(fontSize: 32)),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: _exportCsv,
-                      child: Container(
-                        height: 64,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1A1A1A),
-                          borderRadius: BorderRadius.circular(15),
-                          border: Border.all(color: Colors.black, width: 2),
-                        ),
-                        child: const Text(
-                          'Export Your Files',
-                          style: TextStyle(fontSize: 20, color: Colors.white, fontFamily: 'Figtree'),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

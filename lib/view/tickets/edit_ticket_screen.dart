@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../data/models/ticket_model.dart';
 import '../../../view_model/tickets/ticket_view_model.dart';
-import '../../../view_model/auth/login_view_model.dart'; // ✅ Add this for userId & playerId
+import 'package:stalhub/view/widgets/status_indicator.dart';
 
 class EditTicketScreen extends StatefulWidget {
   final Ticket ticket;
@@ -16,47 +16,50 @@ class EditTicketScreen extends StatefulWidget {
 
 class _EditTicketScreenState extends State<EditTicketScreen> {
   final _formKey = GlobalKey<FormState>();
-
   late TextEditingController _clientNameController;
-  late TextEditingController _statusController;
   late TextEditingController _platformController;
   late TextEditingController _contentController;
-
   late DateTime _createdAt;
   late DateTime _updatedAt;
-
+  String _selectedStatus = 'Not Read';
   bool _isEditing = false;
+  bool _submitted = false;
+
+  final List<String> _statusOptions = ['Not Read', 'Ongoing', 'Resolved', 'Discarded'];
 
   @override
   void initState() {
     super.initState();
     final ticket = widget.ticket;
     _clientNameController = TextEditingController(text: ticket.clientName);
-    _statusController = TextEditingController(text: ticket.status);
     _platformController = TextEditingController(text: ticket.platform);
     _contentController = TextEditingController(text: ticket.content);
+    _selectedStatus = ticket.status;
     _createdAt = ticket.createdAt;
     _updatedAt = ticket.updatedAt ?? ticket.createdAt;
   }
 
   Future<void> _updateTicket() async {
+    setState(() => _submitted = true);
+
+    if (_clientNameController.text.isEmpty ||
+        _platformController.text.isEmpty ||
+        _contentController.text.isEmpty) {
+      _showErrorDialog("Please fill up all the required information.");
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
     final updatedData = {
       'client_name': _clientNameController.text,
-      'status': _statusController.text,
+      'status': _selectedStatus,
       'platform': _platformController.text,
       'content': _contentController.text,
       'updated_at': DateTime.now().toIso8601String(),
     };
 
-    // ✅ Inject userId & playerId
-    final loginVM = Provider.of<LoginViewModel>(context, listen: false);
-    final vm = TicketViewModel(
-      userId: loginVM.loggedInUser?.id ?? '',
-      playerId: loginVM.loggedInUser?.playerId ?? '',
-    );
-
+    final vm = Provider.of<TicketViewModel>(context, listen: false);
     await vm.updateTicket(widget.ticket.id, updatedData);
 
     if (context.mounted) {
@@ -71,11 +74,24 @@ class _EditTicketScreenState extends State<EditTicketScreen> {
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text("OK", style: TextStyle(color: Colors.black)),
-            )
+            ),
           ],
         ),
       );
     }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Invalid Input"),
+        content: Text(message),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
+      ),
+    );
   }
 
   Future<void> _deleteTicket() async {
@@ -96,13 +112,7 @@ class _EditTicketScreenState extends State<EditTicketScreen> {
     );
 
     if (confirm == true) {
-      // ✅ Inject userId & playerId
-      final loginVM = Provider.of<LoginViewModel>(context, listen: false);
-      final vm = TicketViewModel(
-        userId: loginVM.loggedInUser?.id ?? '',
-        playerId: loginVM.loggedInUser?.playerId ?? '',
-      );
-
+      final vm = Provider.of<TicketViewModel>(context, listen: false);
       await vm.deleteTicket(widget.ticket.id);
       if (context.mounted) Navigator.pop(context);
     }
@@ -111,80 +121,99 @@ class _EditTicketScreenState extends State<EditTicketScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Column(
-        children: [
-          const SizedBox(height: 40),
-          Image.asset('assets/images/stalwrites-logo.png', width: 122, height: 68),
-          Expanded(
-            child: Container(
-              width: MediaQuery.of(context).size.width,
-              padding: const EdgeInsets.fromLTRB(30, 40, 30, 40),
-              decoration: ShapeDecoration(
-                color: const Color(0xFFEDEDED),
-                shape: RoundedRectangleBorder(
-                  side: BorderSide(width: 2, color: Colors.black.withAlpha(128)),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(50),
-                    topRight: Radius.circular(50),
+      backgroundColor: const Color(0xFFF9F9F9),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Image.asset(
+                      'assets/images/back-button-icon.png',
+                      width: 32,
+                      height: 32,
+                    ),
                   ),
-                ),
+                ],
               ),
+            ),
+            Expanded(
               child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
                 child: Form(
                   key: _formKey,
+                  autovalidateMode:
+                      _submitted ? AutovalidateMode.always : AutovalidateMode.disabled,
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _labelText("Ticket ID: ${widget.ticket.id}", bold: true),
-                      const SizedBox(height: 8),
-                      _textInput("Client Name", controller: _clientNameController, enabled: _isEditing),
-                      _textInput("Status", controller: _statusController, enabled: _isEditing),
-                      _textInput("Platform", controller: _platformController, enabled: _isEditing),
-                      const SizedBox(height: 8),
+                      _label("Ticket ID: ${widget.ticket.id}", 20, FontWeight.w600),
+                      _input("Client Name", _clientNameController, enabled: _isEditing),
+                      _dropdownStatusField(),
+                      _input("Platform", _platformController, enabled: _isEditing),
+                      const SizedBox(height: 10),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          _labelText("Created: ${DateFormat.yMMMd().format(_createdAt)}"),
-                          _labelText("Updated: ${DateFormat.yMMMd().format(_updatedAt)}"),
+                          Expanded(child: _label("Created: ${DateFormat.yMMMd().format(_createdAt)}", 14, FontWeight.w500)),
+                          const SizedBox(width: 10),
+                          Expanded(child: _label("Updated: ${DateFormat.yMMMd().format(_updatedAt)}", 14, FontWeight.w500)),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      _textInput("Content", controller: _contentController, maxLines: 5, enabled: _isEditing),
-                      const SizedBox(height: 20),
-                      _button(_isEditing ? "Update" : "Edit Ticket", const Color.fromARGB(255, 26, 26, 26), () {
-                        if (_isEditing) {
-                          _updateTicket();
-                        } else {
-                          setState(() => _isEditing = true);
-                        }
-                      }),
-                      const SizedBox(height: 10),
-                      _button(_isEditing ? "Cancel" : "Go Back", Colors.white, () {
-                        if (_isEditing) {
-                          setState(() => _isEditing = false);
-                        } else {
-                          Navigator.pop(context);
-                        }
-                      }, isOutline: true),
-                      const SizedBox(height: 10),
-                      if (_isEditing)
-                        _button("Delete Ticket", const Color(0xFFFF0000), _deleteTicket),
+                      _input("Content", _contentController, maxLines: 5, enabled: _isEditing),
+                      const SizedBox(height: 80),
                     ],
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(25, 0, 25, 25),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _bottomButton(
+              label: _isEditing ? "Update" : "Edit Ticket",
+              color: const Color(0xFFFF7240),
+              onTap: () {
+                if (_isEditing) {
+                  _updateTicket();
+                } else {
+                  setState(() => _isEditing = true);
+                }
+              },
+            ),
+            const SizedBox(height: 10),
+            if (_isEditing)
+              _bottomButton(
+                label: "Cancel",
+                color: Colors.white,
+                textColor: Colors.black,
+                onTap: () => setState(() => _isEditing = false),
+                isOutline: true,
+              ),
+            const SizedBox(height: 10),
+            if (_isEditing)
+              _bottomButton(
+                label: "Delete Ticket",
+                color: const Color(0xFFFF0000),
+                onTap: _deleteTicket,
+              ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _textInput(String hint,
-      {TextEditingController? controller, int maxLines = 1, TextInputType? keyboard, bool enabled = true}) {
+  Widget _input(String hint, TextEditingController controller,
+      {int maxLines = 1, TextInputType? keyboard, bool enabled = true}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: TextFormField(
         controller: controller,
         maxLines: maxLines,
@@ -194,39 +223,84 @@ class _EditTicketScreenState extends State<EditTicketScreen> {
           hintText: hint,
           filled: true,
           fillColor: enabled ? Colors.white : Colors.grey.shade200,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(color: Colors.black.withAlpha(100)),
+            borderSide: BorderSide.none,
           ),
         ),
-        validator: (value) {
-          if (hint.contains("Content") && (value == null || value.isEmpty)) {
-            return "Content cannot be empty";
-          }
-          return null;
-        },
+        validator: (value) => (value == null || value.isEmpty) ? "Required" : null,
       ),
     );
   }
 
-  Widget _labelText(String text, {bool bold = false}) {
+  Widget _dropdownStatusField() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: _isEditing ? Colors.white : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Status',
+              style: TextStyle(fontSize: 14, fontFamily: 'Figtree', fontWeight: FontWeight.w500),
+            ),
+            DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedStatus,
+                dropdownColor: Colors.white,
+                borderRadius: BorderRadius.circular(15),
+                elevation: 6,
+                style: const TextStyle(fontSize: 14, fontFamily: 'Figtree'),
+                icon: const Icon(Icons.arrow_drop_down, color: Colors.black),
+                items: _statusOptions.map((String status) {
+                  return DropdownMenuItem<String>(
+                    value: status,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: StatusIndicator(status: status),
+                    ),
+                  );
+                }).toList(),
+                onChanged: _isEditing
+                    ? (value) {
+                        if (value != null) {
+                          setState(() => _selectedStatus = value);
+                        }
+                      }
+                    : null,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _label(String text, double fontSize, FontWeight fontWeight) {
     return Text(
       text,
-      style: TextStyle(
-        fontSize: bold ? 20 : 14,
-        fontWeight: bold ? FontWeight.bold : FontWeight.w400,
-        fontFamily: 'Figtree',
-      ),
+      style: TextStyle(fontSize: fontSize, fontWeight: fontWeight, fontFamily: 'Figtree'),
     );
   }
 
-  Widget _button(String label, Color color, VoidCallback onTap, {bool isOutline = false}) {
+  Widget _bottomButton({
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+    bool isOutline = false,
+    Color textColor = Colors.white,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 330,
-        height: 56,
+        width: double.infinity,
+        height: 48,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: isOutline ? Colors.white : color,
@@ -236,10 +310,10 @@ class _EditTicketScreenState extends State<EditTicketScreen> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 20,
+            fontSize: 18,
             fontFamily: 'Figtree',
-            fontWeight: FontWeight.w400,
-            color: isOutline ? Colors.black.withAlpha(204) : const Color.fromARGB(255, 255, 255, 255),
+            fontWeight: FontWeight.w500,
+            color: isOutline ? textColor : const Color.fromARGB(255, 0, 0, 0),
           ),
         ),
       ),

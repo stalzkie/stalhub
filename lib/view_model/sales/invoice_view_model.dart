@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/invoice_model.dart';
 import '../../core/services/notification_service.dart';
+import '../../data/repositories/user_repository.dart'; // ✅ Import added
 
 enum DateFilter { today, week, month, all }
 
 class InvoiceViewModel extends ChangeNotifier {
   final SupabaseClient _client = Supabase.instance.client;
 
-  final String userId;               // ✅ Injected userId
-  final String? playerId;            // ✅ Injected playerId (nullable)
+  final String userId;
+  final String? playerId;
 
   InvoiceViewModel({
     required this.userId,
@@ -41,13 +42,11 @@ class InvoiceViewModel extends ChangeNotifier {
   String get topPlatformName => _topPlatformName;
   double get topPlatformPercentage => _topPlatformPercentage;
 
-  // 🔍 Search query update
   void updateSearchQuery(String value) {
     _searchQuery = value;
     notifyListeners();
   }
 
-  // 📅 Filter update
   void setFilter(DateFilter filter) {
     _selectedFilter = filter;
     _applyFilter();
@@ -55,9 +54,8 @@ class InvoiceViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 📥 Fetch invoices
-  Future<void> fetchInvoices() async {
-    if (_hasLoaded) return;
+  Future<void> fetchInvoices({bool force = false}) async {
+    if (!force && _hasLoaded) return;
 
     final response = await _client
         .from('invoices')
@@ -72,51 +70,66 @@ class InvoiceViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ➕ Add Invoice + Notify
   Future<void> addInvoice(Invoice invoice) async {
     await _client.from('invoices').insert(invoice.toMap());
-    _hasLoaded = false;
-    await fetchInvoices();
 
-    if (playerId != null && playerId!.isNotEmpty) {
-      await NotificationService.sendNotification(
-        title: '💸 New Invoice Created',
-        message:
-            'Amount: P${invoice.price.toStringAsFixed(2)}\nClient: ${invoice.clientName}\nDeadline: ${invoice.dueDate.toLocal().toString().split(" ")[0]}\nStatus: ${invoice.status}\nPlatform: ${invoice.platform}',
-        playerId: playerId!,
-      );
-    }
+    _allInvoices.insert(0, invoice);
+    _applyFilter();
+    _computeAnalytics();
+    notifyListeners();
+
+    print('[DEBUG] Sending NEW invoice notification...');
+    final userRepo = UserRepository();
+    final playerIds = await userRepo.fetchAllPlayerIds(); // ✅ Fetch all
+
+    await NotificationService.sendNotificationToMany(
+      title: '💸 New Invoice Created',
+      message:
+          'Amount: P${invoice.price.toStringAsFixed(2)}\nClient: ${invoice.clientName}\nDeadline: ${invoice.dueDate.toLocal().toString().split(" ")[0]}\nStatus: ${invoice.status}\nPlatform: ${invoice.platform}',
+      playerIds: playerIds,
+    );
   }
 
-  // ✏️ Update Invoice + Notify
   Future<void> updateInvoice(int id, Map<String, dynamic> map) async {
     await _client.from('invoices').update(map).eq('id', id);
-    _hasLoaded = false;
-    await fetchInvoices();
+
+    final index = _allInvoices.indexWhere((i) => i.id == id);
+    if (index != -1) {
+      _allInvoices[index] = Invoice.fromMap({...map, 'id': id});
+    }
+
+    _applyFilter();
+    _computeAnalytics();
+    notifyListeners();
 
     final updatedInvoice = _allInvoices.firstWhere(
       (i) => i.id == id,
-      orElse: () => Invoice.fromMap(map),
+      orElse: () {
+        print('[DEBUG] Invoice not found in _allInvoices after update. Using map data.');
+        return Invoice.fromMap({...map, 'id': id});
+      },
     );
 
-    if (playerId != null && playerId!.isNotEmpty) {
-      await NotificationService.sendNotification(
-        title: '🧾 Invoice Updated',
-        message:
-            'Amount: P${updatedInvoice.price.toStringAsFixed(2)}\nClient: ${updatedInvoice.clientName}\nDeadline: ${updatedInvoice.dueDate.toLocal().toString().split(" ")[0]}\nStatus: ${updatedInvoice.status}\nPlatform: ${updatedInvoice.platform}',
-        playerId: playerId!,
-      );
-    }
+    print('[DEBUG] Sending UPDATE invoice notification...');
+    final userRepo = UserRepository();
+    final playerIds = await userRepo.fetchAllPlayerIds(); // ✅ Fetch all
+
+    await NotificationService.sendNotificationToMany(
+      title: '🧾 Invoice Updated',
+      message:
+          'Amount: P${updatedInvoice.price.toStringAsFixed(2)}\nClient: ${updatedInvoice.clientName}\nDeadline: ${updatedInvoice.dueDate.toLocal().toString().split(" ")[0]}\nStatus: ${updatedInvoice.status}\nPlatform: ${updatedInvoice.platform}',
+      playerIds: playerIds,
+    );
   }
 
-  // ❌ Delete Invoice
   Future<void> deleteInvoice(int id) async {
     await _client.from('invoices').delete().eq('id', id);
-    _hasLoaded = false;
-    await fetchInvoices();
+    _allInvoices.removeWhere((i) => i.id == id);
+    _applyFilter();
+    _computeAnalytics();
+    notifyListeners();
   }
 
-  // 🧮 Apply filter
   void _applyFilter() {
     final now = DateTime.now();
     _filteredInvoices = switch (_selectedFilter) {
@@ -132,7 +145,6 @@ class InvoiceViewModel extends ChangeNotifier {
     };
   }
 
-  // 📊 Compute analytics
   void _computeAnalytics() {
     final paidInvoices = _filteredInvoices.where((i) => i.status.toLowerCase() == 'paid').toList();
     final totalPaid = paidInvoices.fold(0.0, (sum, i) => sum + i.price);

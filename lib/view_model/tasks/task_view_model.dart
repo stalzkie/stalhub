@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/task_model.dart';
 import '../../data/repositories/task_repository.dart';
-import '../../core/services/notification_service.dart'; // ✅ Notification service
+import '../../core/services/notification_service.dart';
+import '../../data/repositories/user_repository.dart';
 
 enum DateFilter { today, week, month, all }
 
 class TaskViewModel extends ChangeNotifier {
   final TaskRepository _repository = TaskRepository();
-  final String userId;               // ✅ Injected userId
-  final String? playerId;            // ✅ Injected playerId
+  final String userId;
+  final String? playerId;
 
   TaskViewModel({required this.userId, required this.playerId});
 
@@ -24,8 +25,9 @@ class TaskViewModel extends ChangeNotifier {
   DateFilter get selectedFilter => _selectedFilter;
   bool get isLoading => _isLoading;
 
-  // Load tasks
-  Future<void> fetchTasks() async {
+  Future<void> fetchTasks({bool force = false}) async {
+    if (_allTasks.isNotEmpty && !force) return;
+
     _isLoading = true;
     notifyListeners();
 
@@ -39,7 +41,6 @@ class TaskViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 🔔 Separate notification check
   Future<void> checkTaskDueNotifications() async {
     final now = DateTime.now();
     final prefs = await SharedPreferences.getInstance();
@@ -50,32 +51,34 @@ class TaskViewModel extends ChangeNotifier {
       final difference = task.dueDate.difference(now).inHours;
 
       if (difference <= 24 && difference > 0) {
-        // 24-hour notification key
         final key24 = 'task_${task.id}_24hr_notified';
         final lastNotified24 = prefs.getString(key24);
 
         if (difference > 12 && lastNotified24 != now.toIso8601String().split('T').first) {
-          await NotificationService.sendNotification(
-            title: '⏰ Task Due in 24 Hours!',
-            message: _taskMessage(task),
-            playerId: playerId!,
-          );
-          await prefs.setString(key24, now.toIso8601String().split('T').first);
+          if (playerId != null && playerId!.isNotEmpty) {
+            await NotificationService.sendNotification(
+              title: '⏰ Task Due in 24 Hours!',
+              message: _taskMessage(task),
+              playerId: playerId!,
+            );
+            await prefs.setString(key24, now.toIso8601String().split('T').first);
+          }
         }
       }
 
       if (difference <= 12 && difference > 0) {
-        // 12-hour notification key
         final key12 = 'task_${task.id}_12hr_notified';
         final lastNotified12 = prefs.getString(key12);
 
         if (lastNotified12 != now.toIso8601String().split('T').first) {
-          await NotificationService.sendNotification(
-            title: '⏰ Task Due in 12 Hours!',
-            message: _taskMessage(task),
-            playerId: playerId!,
-          );
-          await prefs.setString(key12, now.toIso8601String().split('T').first);
+          if (playerId != null && playerId!.isNotEmpty) {
+            await NotificationService.sendNotification(
+              title: '⏰ Task Due in 12 Hours!',
+              message: _taskMessage(task),
+              playerId: playerId!,
+            );
+            await prefs.setString(key12, now.toIso8601String().split('T').first);
+          }
         }
       }
     }
@@ -85,7 +88,6 @@ class TaskViewModel extends ChangeNotifier {
     return 'Task: ${task.taskName}\nClient: ${task.clientName}\nPrice: P${task.price}\nPlatform: ${task.platform}\nAssigned To: ${task.assignedTo}\nStatus: ${task.status}\nDue: ${task.dueDate.toLocal().toString().split(" ")[0]}';
   }
 
-  // Date filtering
   List<Task> get filteredByDate {
     final now = DateTime.now();
     return _allTasks.where((task) {
@@ -104,26 +106,23 @@ class TaskViewModel extends ChangeNotifier {
     }).toList();
   }
 
-  // Search filtering
   List<Task> get searchedTasks {
     if (_searchQuery.isEmpty) return _allTasks;
     final q = _searchQuery.toLowerCase();
     return _allTasks.where((task) =>
-      task.id.toString().contains(q) ||
-      task.clientName.toLowerCase().contains(q) ||
-      task.platform.toLowerCase().contains(q) ||
-      task.assignedTo.toLowerCase().contains(q) ||
-      task.status.toLowerCase().contains(q)).toList();
+        task.id.toString().contains(q) ||
+        task.clientName.toLowerCase().contains(q) ||
+        task.platform.toLowerCase().contains(q) ||
+        task.assignedTo.toLowerCase().contains(q) ||
+        task.status.toLowerCase().contains(q)).toList();
   }
 
-  // Stats
   int get totalTasks => filteredByDate.length;
   int get workingTasks => filteredByDate.where((task) => task.status == 'Working').length;
   int get delayedTasks => filteredByDate.where((task) =>
       task.status != 'Delivered' &&
       task.dueDate.isBefore(DateTime.now())).length;
 
-  // Top writer
   String get topWriterName {
     final completed = filteredByDate.where((task) => task.status == 'Delivered');
     if (completed.isEmpty) return '-';
@@ -149,55 +148,51 @@ class TaskViewModel extends ChangeNotifier {
     return (topCount / filteredByDate.length) * 100;
   }
 
-  // Set date filter
   void setFilter(DateFilter filter) {
     _selectedFilter = filter;
     notifyListeners();
   }
 
-  // Search setter
   void updateSearchQuery(String query) {
     _searchQuery = query;
     notifyListeners();
   }
 
-  // Task CRUD
   Future<void> addTask(Task task) async {
     await _repository.addTask(task);
-    await fetchTasks();
+    await fetchTasks(force: true);
 
-    // ✅ Send push notification for new task
-    if (playerId != null && playerId!.isNotEmpty) {
-      await NotificationService.sendNotification(
-        title: '✅ New Task Assigned',
-        message: _taskMessage(task),
-        playerId: playerId!,
-      );
-    }
+    final userRepo = UserRepository();
+    final playerIds = await userRepo.fetchAllPlayerIds();
+
+    await NotificationService.sendNotificationToMany(
+      title: '✅ New Task Assigned',
+      message: _taskMessage(task),
+      playerIds: playerIds,
+    );
   }
 
   Future<void> updateTask(int id, Map<String, dynamic> data) async {
     await _repository.updateTask(id, data);
-    await fetchTasks();
+    await fetchTasks(force: true);
 
     final updatedTask = _allTasks.firstWhere((task) => task.id == id);
 
-    // ✅ Send push notification for update
-    if (playerId != null && playerId!.isNotEmpty) {
-      await NotificationService.sendNotification(
-        title: '📝 Task Updated',
-        message: _taskMessage(updatedTask),
-        playerId: playerId!,
-      );
-    }
+    final userRepo = UserRepository();
+    final playerIds = await userRepo.fetchAllPlayerIds();
+
+    await NotificationService.sendNotificationToMany(
+      title: '📝 Task Updated',
+      message: _taskMessage(updatedTask),
+      playerIds: playerIds,
+    );
   }
 
   Future<void> deleteTask(int id) async {
     await _repository.deleteTask(id);
-    await fetchTasks();
+    await fetchTasks(force: true);
   }
 
-  // Helper
   bool isSameDay(DateTime d1, DateTime d2) =>
       d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
 }
